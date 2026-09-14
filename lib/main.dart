@@ -1,18 +1,26 @@
+// lib/main.dart
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'models/app_models.dart';
+import 'screens/agenda_screen.dart';
+import 'screens/financial_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MeuAppOrcamento());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MeuAppOrcamento extends StatelessWidget {
+  const MeuAppOrcamento({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -22,321 +30,151 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
-          brightness: Brightness.light,
+          primary: const Color(0xFF1976D2),
         ),
         useMaterial3: true,
-      ),
-      home: const SplashCheckScreen(),
-    );
-  }
-}
-
-// ==========================================
-// TELA DE VERIFICAÇÃO INICIAL (SPLASH)
-// ==========================================
-class SplashCheckScreen extends StatefulWidget {
-  const SplashCheckScreen({super.key});
-
-  @override
-  State<SplashCheckScreen> createState() => _SplashCheckScreenState();
-}
-
-class _SplashCheckScreenState extends State<SplashCheckScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _checkInitialFlow();
-  }
-
-  Future<void> _checkInitialFlow() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? segment = prefs.getString('company_segment');
-    final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-
-    if (!mounted) return;
-
-    if (segment == null || segment.isEmpty) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SegmentSelectionPage()),
-      );
-    } else if (!isLoggedIn) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-}
-
-// ==========================================
-// TELA 1: SELEÇÃO DO SEGMENTO DA EMPRESA
-// ==========================================
-class SegmentSelectionPage extends StatefulWidget {
-  const SegmentSelectionPage({super.key});
-
-  @override
-  State<SegmentSelectionPage> createState() => _SegmentSelectionPageState();
-}
-
-class _SegmentSelectionPageState extends State<SegmentSelectionPage> {
-  String? _selectedSegment;
-
-  final List<Map<String, dynamic>> _segments = const [
-    {
-      'title': 'Prestação de Serviços / Manutenção',
-      'icon': Icons.build,
-      'key': 'servicos'
-    },
-    {
-      'title': 'Construção Civil & Reformas',
-      'icon': Icons.home_repair_service,
-      'key': 'construcao'
-    },
-    {
-      'title': 'Comércio & Vendas',
-      'icon': Icons.shopping_bag,
-      'key': 'comercio'
-    },
-    {
-      'title': 'Estética, Beleza & Saúde',
-      'icon': Icons.content_cut,
-      'key': 'estetica'
-    },
-    {
-      'title': 'Tecnologia & Informática',
-      'icon': Icons.computer,
-      'key': 'tecnologia'
-    },
-    {
-      'title': 'Outros Segmentos',
-      'icon': Icons.category,
-      'key': 'outros'
-    },
-  ];
-
-  Future<void> _saveSegmentAndContinue() async {
-    if (_selectedSegment == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecione um segmento.')),
-      );
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('company_segment', _selectedSegment!);
-
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Bem-vindo!')),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Qual é o segmento do seu negócio?',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Isso nos ajuda a personalizar o app e os orçamentos para você.',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _segments.length,
-                itemBuilder: (context, index) {
-                  final item = _segments[index];
-                  final isSelected = _selectedSegment == item['key'];
-
-                  return Card(
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : null,
-                    child: ListTile(
-                      leading: Icon(item['icon'] as IconData),
-                      title: Text(item['title'] as String),
-                      trailing: isSelected
-                          ? const Icon(Icons.check_circle, color: Colors.blue)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _selectedSegment = item['key'] as String;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-            ElevatedButton(
-              onPressed: _saveSegmentAndContinue,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('CONTINUAR', style: TextStyle(fontSize: 16)),
-            ),
-          ],
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
         ),
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('pt', 'BR'),
+      ],
+      home: const MainNavigationScreen(),
     );
   }
 }
 
 // ==========================================
-// TELA 2: LOGIN COM GOOGLE & EMAIL
+// MODELOS DE DADOS LOCAIS
 // ==========================================
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
 
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
+class CompanyProfile {
+  String name;
+  String doc;
+  String phone;
+  String address;
+  String? logoBase64;
 
-class _LoginPageState extends State<LoginPage> {
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
-  bool _isLoading = false;
+  CompanyProfile({
+    this.name = '',
+    this.doc = '',
+    this.phone = '',
+    this.address = '',
+    this.logoBase64,
+  });
 
-  Future<void> _handleGoogleSignIn() async {
-    setState(() => _isLoading = true);
-    try {
-      final account = await _googleSignIn.signIn();
-      if (account != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_logged_in', true);
-        await prefs.setString('user_email', account.email);
-        await prefs.setString('user_name', account.displayName ?? '');
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'doc': doc,
+        'phone': phone,
+        'address': address,
+        'logoBase64': logoBase64,
+      };
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) => const MainNavigationScreen()),
-          );
-        }
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao fazer login: $error')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _continueAsGuest() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_logged_in', true);
-    await prefs.setString('user_email', 'offline');
-
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+  factory CompanyProfile.fromJson(Map<String, dynamic> json) => CompanyProfile(
+        name: json['name'] ?? '',
+        doc: json['doc'] ?? '',
+        phone: json['phone'] ?? '',
+        address: json['address'] ?? '',
+        logoBase64: json['logoBase64'],
       );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(Icons.cloud_sync, size: 80, color: Colors.blue),
-            const SizedBox(height: 16),
-            const Text(
-              'Conecte sua Conta',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Faça login com o Google para salvar seus orçamentos e backups diretamente no Google Drive.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 32),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else ...[
-              OutlinedButton.icon(
-                onPressed: _handleGoogleSignIn,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: const Icon(Icons.login, color: Colors.red),
-                label: const Text(
-                  'Entrar com Google (Backup no Drive)',
-                  style: TextStyle(fontSize: 15),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _continueAsGuest,
-                child: const Text('Continuar sem login (Apenas offline)'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-// ==========================================
-// MODELOS DE DADOS
-// ==========================================
-class Product {
-  final String id;
-  final String name;
-  final double price;
-
-  Product({required this.id, required this.name, required this.price});
-}
-
-class OrderItem {
-  final Product product;
+class BudgetItem {
+  String description;
   int quantity;
+  double unitPrice;
 
-  OrderItem({required this.product, this.quantity = 1});
+  BudgetItem({
+    required this.description,
+    this.quantity = 1,
+    this.unitPrice = 0.0,
+  });
 
-  double get total => product.price * quantity;
+  double get total => quantity * unitPrice;
+
+  Map<String, dynamic> toJson() => {
+        'description': description,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+      };
+
+  factory BudgetItem.fromJson(Map<String, dynamic> json) => BudgetItem(
+        description: json['description'] ?? '',
+        quantity: json['quantity'] ?? 1,
+        unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
+      );
+}
+
+class Budget {
+  String id;
+  int number;
+  String clientName;
+  String clientPhone;
+  String clientAddress;
+  DateTime date;
+  List<BudgetItem> items;
+  double discount;
+  String status; // 'Pendente', 'Aprovado', 'Concluído', 'Cancelado'
+  String notes;
+
+  Budget({
+    required this.id,
+    required this.number,
+    required this.clientName,
+    this.clientPhone = '',
+    this.clientAddress = '',
+    required this.date,
+    required this.items,
+    this.discount = 0.0,
+    this.status = 'Pendente',
+    this.notes = '',
+  });
+
+  double get subtotal => items.fold(0.0, (sum, item) => sum + item.total);
+  double get total => (subtotal - discount) < 0 ? 0.0 : (subtotal - discount);
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'number': number,
+        'clientName': clientName,
+        'clientPhone': clientPhone,
+        'clientAddress': clientAddress,
+        'date': date.toIso8601String(),
+        'items': items.map((i) => i.toJson()).toList(),
+        'discount': discount,
+        'status': status,
+        'notes': notes,
+      };
+
+  factory Budget.fromJson(Map<String, dynamic> json) => Budget(
+        id: json['id'] ?? '',
+        number: json['number'] ?? 1,
+        clientName: json['clientName'] ?? '',
+        clientPhone: json['clientPhone'] ?? '',
+        clientAddress: json['clientAddress'] ?? '',
+        date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+        items: (json['items'] as List<dynamic>?)
+                ?.map((i) => BudgetItem.fromJson(i))
+                .toList() ??
+            [],
+        discount: (json['discount'] as num?)?.toDouble() ?? 0.0,
+        status: json['status'] ?? 'Pendente',
+        notes: json['notes'] ?? '',
+      );
 }
 
 // ==========================================
-// TELA PRINCIPAL (NAVEGAÇÃO ABA)
+// NAVEGAÇÃO PRINCIPAL (BOTTOM NAVIGATION)
 // ==========================================
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
@@ -347,129 +185,41 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  String _companyName = '';
-  String _companyDoc = '';
-  String _companyPhone = '';
-  String _companyAddress = '';
-  String _userEmail = '';
-  Uint8List? _companyLogoBytes;
-
-  final List<Product> _products = [
-    Product(id: '1', name: 'Serviço de Consultoria', price: 150.0),
-    Product(id: '2', name: 'Manutenção de Equipamento', price: 250.0),
+  final List<Widget> _screens = [
+    const BudgetsHomeScreen(),
+    const AgendaScreen(),
+    const FinancialScreen(),
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _loadCompanyProfile();
-  }
-
-  Future<void> _loadCompanyProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _companyName = prefs.getString('company_name') ?? 'Minha Empresa Ltda';
-      _companyDoc = prefs.getString('company_doc') ?? '00.000.000/0001-00';
-      _companyPhone = prefs.getString('company_phone') ?? '(11) 99999-9999';
-      _companyAddress =
-          prefs.getString('company_address') ?? 'Rua Principal, 100';
-      _userEmail = prefs.getString('user_email') ?? '';
-    });
-  }
-
-  Future<void> _saveCompanyProfile(
-    String name,
-    String doc,
-    String phone,
-    String address,
-    Uint8List? logoBytes,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('company_name', name);
-    await prefs.setString('company_doc', doc);
-    await prefs.setString('company_phone', phone);
-    await prefs.setString('company_address', address);
-
-    setState(() {
-      _companyName = name;
-      _companyDoc = doc;
-      _companyPhone = phone;
-      _companyAddress = address;
-      if (logoBytes != null) {
-        _companyLogoBytes = logoBytes;
-      }
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil da empresa salvo com sucesso!')),
-      );
-    }
-  }
-
-  void _addProduct(Product product) {
-    setState(() {
-      _products.add(product);
-    });
-  }
-
-  void _removeProduct(String id) {
-    setState(() {
-      _products.removeWhere((p) => p.id == id);
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final pages = [
-      CreateQuotePage(
-        products: _products,
-        companyName: _companyName,
-        companyDoc: _companyDoc,
-        companyPhone: _companyPhone,
-        companyAddress: _companyAddress,
-        companyLogoBytes: _companyLogoBytes,
-      ),
-      ProductsPage(
-        products: _products,
-        onAddProduct: _addProduct,
-        onRemoveProduct: _removeProduct,
-      ),
-      CompanyProfilePage(
-        companyName: _companyName,
-        companyDoc: _companyDoc,
-        companyPhone: _companyPhone,
-        companyAddress: _companyAddress,
-        userEmail: _userEmail,
-        companyLogoBytes: _companyLogoBytes,
-        onSave: _saveCompanyProfile,
-      ),
-    ];
-
     return Scaffold(
-      body: pages[_currentIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.description_outlined),
-            selectedIcon: Icon(Icons.description),
-            label: 'Novo Orçamento',
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Theme.of(context).primaryColor,
+        unselectedItemColor: Colors.grey.shade600,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.request_quote),
+            label: 'Orçamentos',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Produtos',
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: 'Agenda',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.business_outlined),
-            selectedIcon: Icon(Icons.business),
-            label: 'Empresa',
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart),
+            label: 'Financeiro',
           ),
         ],
       ),
@@ -478,466 +228,395 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // ==========================================
-// PÁGINA: CRIAR ORÇAMENTO / RECIBO & PDF
+// TELA PRINCIPAL DE ORÇAMENTOS
 // ==========================================
-class CreateQuotePage extends StatefulWidget {
-  final List<Product> products;
-  final String companyName;
-  final String companyDoc;
-  final String companyPhone;
-  final String companyAddress;
-  final Uint8List? companyLogoBytes;
 
-  const CreateQuotePage({
-    super.key,
-    required this.products,
-    required this.companyName,
-    required this.companyDoc,
-    required this.companyPhone,
-    required this.companyAddress,
-    this.companyLogoBytes,
-  });
+class BudgetsHomeScreen extends StatefulWidget {
+  const BudgetsHomeScreen({super.key});
 
   @override
-  State<CreateQuotePage> createState() => _CreateQuotePageState();
+  State<BudgetsHomeScreen> createState() => _BudgetsHomeScreenState();
 }
 
-class _CreateQuotePageState extends State<CreateQuotePage> {
-  final _clientNameController = TextEditingController();
-  final _clientPhoneController = TextEditingController();
-  final List<OrderItem> _selectedItems = [];
+class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
+  CompanyProfile _companyProfile = CompanyProfile();
+  List<Budget> _budgets = [];
+  String _searchQuery = '';
+  String _statusFilter = 'Todos';
 
-  double get _grandTotal =>
-      _selectedItems.fold(0.0, (sum, item) => sum + item.total);
+  final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
-  void _addItem(Product product) {
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final profileStr = prefs.getString('company_profile');
+    if (profileStr != null) {
+      setState(() {
+        _companyProfile = CompanyProfile.fromJson(jsonDecode(profileStr));
+      });
+    }
+
+    final budgetsStr = prefs.getString('budgets_list');
+    if (budgetsStr != null) {
+      final List<dynamic> listJson = jsonDecode(budgetsStr);
+      setState(() {
+        _budgets = listJson.map((e) => Budget.fromJson(e)).toList();
+      });
+    }
+  }
+
+  Future<void> _saveBudgets() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = jsonEncode(_budgets.map((b) => b.toJson()).toList());
+    await prefs.setString('budgets_list', jsonStr);
+  }
+
+  Future<void> _saveProfile(CompanyProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('company_profile', jsonEncode(profile.toJson()));
     setState(() {
-      final index =
-          _selectedItems.indexWhere((i) => i.product.id == product.id);
-      if (index >= 0) {
-        _selectedItems[index].quantity++;
-      } else {
-        _selectedItems.add(OrderItem(product: product, quantity: 1));
-      }
+      _companyProfile = profile;
     });
   }
 
-  void _generateAndShowPdf() async {
-    if (_clientNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, informe o nome do cliente.')),
-      );
-      return;
-    }
-
-    if (_selectedItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Adicione pelo menos um produto ao orçamento.')),
-      );
-      return;
-    }
-
-    final pdf = pw.Document();
-
-    pw.ImageProvider? logoImage;
-    if (widget.companyLogoBytes != null) {
-      logoImage = pw.MemoryImage(widget.companyLogoBytes!);
-    }
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        widget.companyName,
-                        style: pw.TextStyle(
-                          fontSize: 20,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.Text('CNPJ/CPF: ${widget.companyDoc}'),
-                      pw.Text('Telefone: ${widget.companyPhone}'),
-                      pw.Text('Endereço: ${widget.companyAddress}'),
-                    ],
-                  ),
-                  if (logoImage != null)
-                    pw.SizedBox(
-                      height: 60,
-                      width: 60,
-                      child: pw.Image(logoImage),
-                    ),
-                ],
-              ),
-              pw.SizedBox(height: 12),
-              pw.Divider(),
-              pw.SizedBox(height: 12),
-              pw.Text(
-                'ORÇAMENTO / RECIBO',
-                style:
-                    pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text('Cliente: ${_clientNameController.text}'),
-              if (_clientPhoneController.text.isNotEmpty)
-                pw.Text('Telefone: ${_clientPhoneController.text}'),
-              pw.Text(
-                'Data: ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-              ),
-              pw.SizedBox(height: 16),
-              pw.TableHelper.fromTextArray(
-                headers: ['Item / Serviço', 'Qtd', 'Preço Unit.', 'Total'],
-                data: _selectedItems.map((item) {
-                  return [
-                    item.product.name,
-                    '${item.quantity}',
-                    'R\$ ${item.product.price.toStringAsFixed(2)}',
-                    'R\$ ${item.total.toStringAsFixed(2)}',
-                  ];
-                }).toList(),
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey300),
-                cellAlignment: pw.Alignment.centerLeft,
-              ),
-              pw.SizedBox(height: 16),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'TOTAL: R\$ ${_grandTotal.toStringAsFixed(2)}',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              pw.Spacer(),
-              pw.Center(
-                child: pw.Text(
-                  'Obrigado pela preferência!',
-                  style: const pw.TextStyle(color: PdfColors.grey700),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Orcamento_${_clientNameController.text}.pdf',
-    );
+  List<Budget> get _filteredBudgets {
+    return _budgets.where((b) {
+      final matchesQuery = b.clientName
+              .toLowerCase()
+              .contains(_searchQuery.toLowerCase()) ||
+          b.number.toString().contains(_searchQuery);
+      final matchesStatus =
+          _statusFilter == 'Todos' || b.status == _statusFilter;
+      return matchesQuery && matchesStatus;
+    }).toList();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Novo Orçamento / Recibo')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Dados do Cliente',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _clientNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome do Cliente',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _clientPhoneController,
-                      decoration: const InputDecoration(
-                        labelText: 'Telefone / WhatsApp',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone),
-                      ),
-                      keyboardType: TextInputType.phone,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Itens do Orçamento',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                PopupMenuButton<Product>(
-                  icon: const Row(
-                    children: [
-                      Icon(Icons.add),
-                      SizedBox(width: 4),
-                      Text('Adicionar Item'),
-                    ],
-                  ),
-                  onSelected: _addItem,
-                  itemBuilder: (context) {
-                    if (widget.products.isEmpty) {
-                      return [
-                        const PopupMenuItem(
-                          enabled: false,
-                          child: Text('Nenhum produto cadastrado'),
-                        ),
-                      ];
-                    }
-                    return widget.products.map((p) {
-                      return PopupMenuItem(
-                        value: p,
-                        child: Text
-                            ('${p.name} - R\$ ${p.price.toStringAsFixed(2)}'),
-                      );
-                    }).toList();
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_selectedItems.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32.0),
-                child: Center(
-                  child: Text('Nenhum produto adicionado ao orçamento.'),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _selectedItems.length,
-                itemBuilder: (context, index) {
-                  final item = _selectedItems[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(item.product.name),
-                      subtitle: Text(
-                        'R\$ ${item.product.price.toStringAsFixed(2)} x ${item.quantity} = R\$ ${item.total.toStringAsFixed(2)}',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () {
-                              setState(() {
-                                if (item.quantity > 1) {
-                                  item.quantity--;
-                                } else {
-                                  _selectedItems.removeAt(index);
-                                }
-                              });
-                            },
-                          ),
-                          Text('${item.quantity}'),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () {
-                              setState(() {
-                                item.quantity++;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            const SizedBox(height: 16),
-            Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Valor Total:',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'R\$ ${_grandTotal.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color:
-                            Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _generateAndShowPdf,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-              ),
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text(
-                'GERAR E IMPRIMIR PDF',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+  void _openProfileEditor() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CompanyProfilePage(
+          profile: _companyProfile,
+          onSave: (updatedProfile) {
+            _saveProfile(updatedProfile);
+          },
         ),
       ),
     );
   }
-}
 
-// ==========================================
-// PÁGINA: GERENCIAMENTO DE PRODUTOS
-// ==========================================
-class ProductsPage extends StatelessWidget {
-  final List<Product> products;
-  final Function(Product) onAddProduct;
-  final Function(String) onRemoveProduct;
+  void _openBudgetForm([Budget? budget]) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BudgetFormScreen(
+          budget: budget,
+          nextNumber: _budgets.length + 1,
+          onSave: (savedBudget) {
+            setState(() {
+              final index = _budgets.indexWhere((b) => b.id == savedBudget.id);
+              if (index >= 0) {
+                _budgets[index] = savedBudget;
+              } else {
+                _budgets.add(savedBudget);
+              }
+            });
+            _saveBudgets();
+          },
+        ),
+      ),
+    );
+  }
 
-  const ProductsPage({
-    super.key,
-    required this.products,
-    required this.onAddProduct,
-    required this.onRemoveProduct,
-  });
-
-  void _showAddProductDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final priceController = TextEditingController();
-
+  void _deleteBudget(String id) {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Cadastrar Produto / Serviço'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Nome do Item'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: priceController,
-                decoration: const InputDecoration(labelText: 'Preço (R\$)'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Orçamento?'),
+        content: const Text('Esta ação não poderá ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                final price = double.tryParse(
-                        priceController.text.replaceAll(',', '.')) ??
-                    0.0;
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _budgets.removeWhere((b) => b.id == id);
+              });
+              _saveBudgets();
+              Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
 
-                if (name.isNotEmpty && price > 0) {
-                  onAddProduct(Product(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: name,
-                    price: price,
-                  ));
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
-        );
-      },
+  void _generatePdfPreview(Budget budget, {bool isReceipt = false}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PdfPreviewScreen(
+          title: isReceipt
+              ? 'Recibo - ${budget.clientName}'
+              : 'Orçamento #${budget.number}',
+          buildPdf: (format) => generateBudgetPdf(
+            budget,
+            _companyProfile,
+            isReceipt: isReceipt,
+            pageFormat: format,
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filteredBudgets;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Meus Produtos / Serviços')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddProductDialog(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo Produto'),
+      appBar: AppBar(
+        title: const Text('Orçamentos & Recibos'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.business),
+            tooltip: 'Perfil da Empresa',
+            onPressed: _openProfileEditor,
+          ),
+        ],
       ),
-      body: products.isEmpty
-          ? const Center(child: Text('Nenhum produto cadastrado ainda.'))
-          : ListView.builder(
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final product = products[index];
-                return ListTile(
-                  title: Text(product.name),
-                  subtitle: Text('R\$ ${product.price.toStringAsFixed(2)}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => onRemoveProduct(product.id),
+      body: Column(
+        children: [
+          // Campo de busca
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Buscar por cliente ou número...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+          ),
+
+          // Filtro por Status
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: ['Todos', 'Pendente', 'Aprovado', 'Concluído', 'Cancelado']
+                  .map((status) {
+                final isSelected = _statusFilter == status;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(status),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      if (selected) setState(() => _statusFilter = status);
+                    },
                   ),
                 );
-              },
+              }).toList(),
             ),
+          ),
+          const SizedBox(height: 8),
+
+          // Lista de Orçamentos
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.description_outlined,
+                            size: 64, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Nenhum orçamento encontrado.',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final item = filtered[index];
+                      Color statusColor;
+
+                      switch (item.status) {
+                        case 'Aprovado':
+                          statusColor = Colors.blue;
+                          break;
+                        case 'Concluído':
+                          statusColor = Colors.green;
+                          break;
+                        case 'Cancelado':
+                          statusColor = Colors.red;
+                          break;
+                        default:
+                          statusColor = Colors.orange;
+                      }
+
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          title: Row(
+                            children: [
+                              Text(
+                                '#${item.number.toString().padLeft(3, '0')}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  item.clientName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                  'Data: ${DateFormat('dd/MM/yyyy').format(item.date)}'),
+                              Text(
+                                'Total: ${currencyFormat.format(item.total)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  item.status,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                onSelected: (val) {
+                                  if (val == 'pdf') {
+                                    _generatePdfPreview(item);
+                                  } else if (val == 'recibo') {
+                                    _generatePdfPreview(item, isReceipt: true);
+                                  } else if (val == 'editar') {
+                                    _openBudgetForm(item);
+                                  } else if (val == 'excluir') {
+                                    _deleteBudget(item.id);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
+                                    value: 'pdf',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.picture_as_pdf,
+                                            color: Colors.red, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('PDF Orçamento'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'recibo',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.receipt,
+                                            color: Colors.green, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('PDF Recibo'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'editar',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit,
+                                            color: Colors.blue, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Editar'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'excluir',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.delete,
+                                            color: Colors.grey, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Excluir'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openBudgetForm(),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo Orçamento'),
+      ),
     );
   }
 }
 
 // ==========================================
-// PÁGINA: PERFIL DA EMPRESA
+// TELA DE PERFIL DA EMPRESA
 // ==========================================
+
 class CompanyProfilePage extends StatefulWidget {
-  final String companyName;
-  final String companyDoc;
-  final String companyPhone;
-  final String companyAddress;
-  final String userEmail;
-  final Uint8List? companyLogoBytes;
-  final Function(String, String, String, String, Uint8List?) onSave;
+  final CompanyProfile profile;
+  final Function(CompanyProfile) onSave;
 
   const CompanyProfilePage({
     super.key,
-    required this.companyName,
-    required this.companyDoc,
-    required this.companyPhone,
-    required this.companyAddress,
-    required this.userEmail,
-    this.companyLogoBytes,
+    required this.profile,
     required this.onSave,
   });
 
@@ -950,25 +629,26 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   late TextEditingController _docController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
-  Uint8List? _logoBytes;
+  String? _logoBase64;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.companyName);
-    _docController = TextEditingController(text: widget.companyDoc);
-    _phoneController = TextEditingController(text: widget.companyPhone);
-    _addressController = TextEditingController(text: widget.companyAddress);
-    _logoBytes = widget.companyLogoBytes;
+    _nameController = TextEditingController(text: widget.profile.name);
+    _docController = TextEditingController(text: widget.profile.doc);
+    _phoneController = TextEditingController(text: widget.profile.phone);
+    _addressController = TextEditingController(text: widget.profile.address);
+    _logoBase64 = widget.profile.logoBase64;
   }
 
-  Future<void> _pickLogo() async {
+  Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
       setState(() {
-        _logoBytes = bytes;
+        _logoBase64 = base64Encode(bytes);
       });
     }
   }
@@ -976,38 +656,36 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dados da Minha Empresa')),
+      appBar: AppBar(
+        title: const Text('Perfil da Empresa'),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.userEmail.isNotEmpty)
-              Chip(
-                avatar: const Icon(Icons.account_circle),
-                label: Text('Conectado como: ${widget.userEmail}'),
-              ),
-            const SizedBox(height: 12),
             GestureDetector(
-              onTap: _pickLogo,
+              onTap: _pickImage,
               child: CircleAvatar(
-                radius: 48,
-                backgroundColor: Colors.grey[200],
-                backgroundImage:
-                    _logoBytes != null ? MemoryImage(_logoBytes!) : null,
-                child: _logoBytes == null
-                    ? const Icon(Icons.add_a_photo,
-                        size: 36, color: Colors.grey)
+                radius: 50,
+                backgroundColor: Colors.grey.shade200,
+                backgroundImage: _logoBase64 != null
+                    ? MemoryImage(base64Decode(_logoBase64!))
+                    : null,
+                child: _logoBase64 == null
+                    ? const Icon(Icons.add_a_photo, size: 40, color: Colors.grey)
                     : null,
               ),
             ),
             const SizedBox(height: 8),
-            const Center(child: Text('Clique para alterar a Logo')),
+            TextButton(
+              onPressed: _pickImage,
+              child: const Text('Selecionar Logo'),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
-                labelText: 'Nome da Empresa / Razão Social',
+                labelText: 'Nome da Empresa / Profissional',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1015,13 +693,14 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
             TextField(
               controller: _docController,
               decoration: const InputDecoration(
-                labelText: 'CNPJ ou CPF',
+                labelText: 'CPF / CNPJ',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _phoneController,
+              keyboardType: TextInputType.phone,
               decoration: const InputDecoration(
                 labelText: 'Telefone / WhatsApp',
                 border: OutlineInputBorder(),
@@ -1036,25 +715,588 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
               ),
             ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                widget.onSave(
-                  _nameController.text,
-                  _docController.text,
-                  _phoneController.text,
-                  _addressController.text,
-                  _logoBytes,
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  final updated = CompanyProfile(
+                    name: _nameController.text,
+                    doc: _docController.text,
+                    phone: _phoneController.text,
+                    address: _addressController.text,
+                    logoBase64: _logoBase64,
+                  );
+                  widget.onSave(updated);
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.save),
+                label: const Text('SALVAR PERFIL'),
               ),
-              icon: const Icon(Icons.save),
-              label: const Text('SALVAR PERFIL'),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+// ==========================================
+// FORMULÁRIO DE CRIAR / EDITAR ORÇAMENTO
+// ==========================================
+
+class BudgetFormScreen extends StatefulWidget {
+  final Budget? budget;
+  final int nextNumber;
+  final Function(Budget) onSave;
+
+  const BudgetFormScreen({
+    super.key,
+    this.budget,
+    required this.nextNumber,
+    required this.onSave,
+  });
+
+  @override
+  State<BudgetFormScreen> createState() => _BudgetFormScreenState();
+}
+
+class _BudgetFormScreenState extends State<BudgetFormScreen> {
+  final _clientNameController = TextEditingController();
+  final _clientPhoneController = TextEditingController();
+  final _clientAddressController = TextEditingController();
+  final _discountController = TextEditingController(text: '0.0');
+  final _notesController = TextEditingController();
+
+  String _status = 'Pendente';
+  List<BudgetItem> _items = [];
+
+  final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.budget != null) {
+      _clientNameController.text = widget.budget!.clientName;
+      _clientPhoneController.text = widget.budget!.clientPhone;
+      _clientAddressController.text = widget.budget!.clientAddress;
+      _discountController.text = widget.budget!.discount.toString();
+      _notesController.text = widget.budget!.notes;
+      _status = widget.budget!.status;
+      _items = List.from(widget.budget!.items);
+    }
+  }
+
+  void _addItemModal() {
+    final descController = TextEditingController();
+    final qtyController = TextEditingController(text: '1');
+    final priceController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Adicionar Item / Serviço'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(labelText: 'Descrição'),
+            ),
+            TextField(
+              controller: qtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantidade'),
+            ),
+            TextField(
+              controller: priceController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration:
+                  const InputDecoration(labelText: 'Valor Unitário (R\$)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (descController.text.isNotEmpty &&
+                  priceController.text.isNotEmpty) {
+                setState(() {
+                  _items.add(
+                    BudgetItem(
+                      description: descController.text,
+                      quantity: int.tryParse(qtyController.text) ?? 1,
+                      unitPrice:
+                          double.tryParse(priceController.text.replaceAll(',', '.')) ??
+                              0.0,
+                    ),
+                  );
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double get _subtotal =>
+      _items.fold(0.0, (sum, item) => sum + item.total);
+  double get _discount =>
+      double.tryParse(_discountController.text.replaceAll(',', '.')) ?? 0.0;
+  double get _total => (_subtotal - _discount) < 0 ? 0.0 : (_subtotal - _discount);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.budget == null ? 'Novo Orçamento' : 'Editar Orçamento'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _clientNameController,
+              decoration: const InputDecoration(
+                labelText: 'Nome do Cliente *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _clientPhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Telefone',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _status,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ['Pendente', 'Aprovado', 'Concluído', 'Cancelado']
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _status = val);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _clientAddressController,
+              decoration: const InputDecoration(
+                labelText: 'Endereço do Cliente',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ITENS
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Itens do Orçamento',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                TextButton.icon(
+                  onPressed: _addItemModal,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Adicionar Item'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            _items.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text('Nenhum item adicionado.'),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      return Card(
+                        child: ListTile(
+                          title: Text(item.description),
+                          subtitle: Text(
+                              '${item.quantity}x ${currencyFormat.format(item.unitPrice)}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                currencyFormat.format(item.total),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () {
+                                  setState(() {
+                                    _items.removeAt(index);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+            const SizedBox(height: 20),
+            TextField(
+              controller: _discountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Desconto Total (R\$)',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Observações / Condições de Pagamento',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // VALOR TOTAL
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'VALOR TOTAL:',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    currencyFormat.format(_total),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (_clientNameController.text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Informe o nome do cliente.')),
+                    );
+                    return;
+                  }
+
+                  final budgetToSave = Budget(
+                    id: widget.budget?.id ?? DateTime.now().toString(),
+                    number: widget.budget?.number ?? widget.nextNumber,
+                    clientName: _clientNameController.text,
+                    clientPhone: _clientPhoneController.text,
+                    clientAddress: _clientAddressController.text,
+                    date: widget.budget?.date ?? DateTime.now(),
+                    items: _items,
+                    discount: _discount,
+                    status: _status,
+                    notes: _notesController.text,
+                  );
+
+                  widget.onSave(budgetToSave);
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.save),
+                label: const Text('SALVAR ORÇAMENTO'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// TELA DE PRÉ-VISUALIZAÇÃO DE PDF
+// ==========================================
+
+class PdfPreviewScreen extends StatelessWidget {
+  final String title;
+  final Future<Uint8List> Function(PdfPageFormat) buildPdf;
+
+  const PdfPreviewScreen({
+    super.key,
+    required this.title,
+    required this.buildPdf,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+      ),
+      body: PdfPreview(
+        build: buildPdf,
+        allowPrinting: true,
+        allowSharing: true,
+        canChangePageFormat: false,
+      ),
+    );
+  }
+}
+
+// ==========================================
+// GERADOR DE DOCUMENTO PDF
+// ==========================================
+
+Future<Uint8List> generateBudgetPdf(
+  Budget budget,
+  CompanyProfile profile, {
+  bool isReceipt = false,
+  PdfPageFormat pageFormat = PdfPageFormat.a4,
+}) async {
+  final pdf = pw.Document();
+  final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+  final dateFormat = DateFormat('dd/MM/yyyy');
+
+  pw.ImageProvider? logoImage;
+  if (profile.logoBase64 != null && profile.logoBase64!.isNotEmpty) {
+    try {
+      final bytes = base64Decode(profile.logoBase64!);
+      logoImage = pw.MemoryImage(bytes);
+    } catch (_) {}
+  }
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: pageFormat,
+      build: (pw.Context context) {
+        return pw.Column(
+          cross: pw.CrossAxisAlignment.start,
+          children: [
+            // Cabeçalho da Empresa
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              cross: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  cross: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      profile.name.isNotEmpty ? profile.name : 'Sua Empresa',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    if (profile.doc.isNotEmpty)
+                      pw.Text('CPF/CNPJ: ${profile.doc}'),
+                    if (profile.phone.isNotEmpty)
+                      pw.Text('Tel/WhatsApp: ${profile.phone}'),
+                    if (profile.address.isNotEmpty)
+                      pw.Text('Endereço: ${profile.address}'),
+                  ],
+                ),
+                if (logoImage != null)
+                  pw.Container(
+                    width: 70,
+                    height: 70,
+                    child: pw.Image(logoImage),
+                  ),
+              ],
+            ),
+            pw.SizedBox(height: 15),
+            pw.Divider(),
+            pw.SizedBox(height: 10),
+
+            // Título do Documento
+            pw.Center(
+              child: pw.Text(
+                isReceipt
+                    ? 'RECIBO DE PAGAMENTO Nº ${budget.number.toString().padLeft(4, '0')}'
+                    : 'ORÇAMENTO Nº ${budget.number.toString().padLeft(4, '0')}',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue800,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            // Dados do Cliente
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Column(
+                cross: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Cliente: ${budget.clientName}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  if (budget.clientPhone.isNotEmpty)
+                    pw.Text('Telefone: ${budget.clientPhone}'),
+                  if (budget.clientAddress.isNotEmpty)
+                    pw.Text('Endereço: ${budget.clientAddress}'),
+                  pw.Text('Data: ${dateFormat.format(budget.date)}'),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            // Tabela de Itens
+            pw.Table.fromTextArray(
+              headers: ['Descrição', 'Qtd', 'Vlr. Unit.', 'Total'],
+              data: budget.items
+                  .map((item) => [
+                        item.description,
+                        item.quantity.toString(),
+                        currencyFormat.format(item.unitPrice),
+                        currencyFormat.format(item.total),
+                      ])
+                  .toList(),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.white,
+              ),
+              headerDecoration:
+                  const pw.BoxDecoration(color: PdfColors.blue800),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellAlignments: {
+                1: pw.Alignment.center,
+                2: pw.Alignment.centerRight,
+                3: pw.Alignment.centerRight,
+              },
+            ),
+            pw.SizedBox(height: 15),
+
+            // Resumo Financeiro
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Container(
+                  width: 200,
+                  child: pw.Column(
+                    children: [
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('Subtotal:'),
+                          pw.Text(currencyFormat.format(budget.subtotal)),
+                        ],
+                      ),
+                      if (budget.discount > 0)
+                        pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text('Desconto:'),
+                            pw.Text(
+                              '- ${currencyFormat.format(budget.discount)}',
+                              style: const pw.TextStyle(color: PdfColors.red),
+                            ),
+                          ],
+                        ),
+                      pw.Divider(),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('TOTAL:',
+                              style: pw.TextStyle(
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 14)),
+                          pw.Text(
+                            currencyFormat.format(budget.total),
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 14,
+                              color: PdfColors.blue800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            if (budget.notes.isNotEmpty) ...[
+              pw.SizedBox(height: 15),
+              pw.Text('Observações / Condições:',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 4),
+              pw.Text(budget.notes, style: const pw.TextStyle(fontSize: 10)),
+            ],
+
+            pw.Spacer(),
+
+            // Assinatura
+            pw.Center(
+              pw.Column(
+                children: [
+                  pw.Container(width: 200, child: pw.Divider()),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    profile.name.isNotEmpty
+                        ? profile.name
+                        : 'Assinatura do Responsável',
+                    style: const pw.TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+          ],
+        );
+      },
+    ),
+  );
+
+  return pdf.save();
 }
