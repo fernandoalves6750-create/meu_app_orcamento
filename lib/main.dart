@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -9,13 +8,20 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:signature/signature.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-import 'models/app_models.dart';
 import 'screens/agenda_screen.dart';
 import 'screens/financial_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  final prefs = await SharedPreferences.getInstance();
+  if (!prefs.containsKey('install_date')) {
+    await prefs.setString('install_date', DateTime.now().toIso8601String());
+  }
+
   runApp(const MeuAppOrcamento());
 }
 
@@ -25,7 +31,7 @@ class MeuAppOrcamento extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gerador de Orçamentos',
+      title: 'OrçaFácil PRO',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -46,7 +52,7 @@ class MeuAppOrcamento extends StatelessWidget {
       supportedLocales: const [
         Locale('pt', 'BR'),
       ],
-      home: const MainNavigationScreen(),
+      home: const WelcomeScreen(),
     );
   }
 }
@@ -61,6 +67,7 @@ class CompanyProfile {
   String phone;
   String address;
   String? logoBase64;
+  String? signatureBase64;
 
   CompanyProfile({
     this.name = '',
@@ -68,6 +75,7 @@ class CompanyProfile {
     this.phone = '',
     this.address = '',
     this.logoBase64,
+    this.signatureBase64,
   });
 
   Map<String, dynamic> toJson() => {
@@ -76,6 +84,7 @@ class CompanyProfile {
         'phone': phone,
         'address': address,
         'logoBase64': logoBase64,
+        'signatureBase64': signatureBase64,
       };
 
   factory CompanyProfile.fromJson(Map<String, dynamic> json) => CompanyProfile(
@@ -84,6 +93,7 @@ class CompanyProfile {
         phone: json['phone'] ?? '',
         address: json['address'] ?? '',
         logoBase64: json['logoBase64'],
+        signatureBase64: json['signatureBase64'],
       );
 }
 
@@ -122,7 +132,7 @@ class Budget {
   DateTime date;
   List<BudgetItem> items;
   double discount;
-  String status; // 'Pendente', 'Aprovado', 'Concluído', 'Cancelado'
+  String status;
   String notes;
 
   Budget({
@@ -172,11 +182,123 @@ class Budget {
 }
 
 // ==========================================
-// NAVEGAÇÃO PRINCIPAL (BOTTOM NAVIGATION)
+// TELA DE BOAS-VINDAS & LOGIN OBRIGATÓRIO (SIMPLIFICADO)
+// ==========================================
+
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> {
+  bool _isLoading = false;
+
+  // GoogleSignIn limpo e sem parâmetros para evitar o erro 401: invalid_client
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  Future<void> _handleGoogleLogin() async {
+    setState(() => _isLoading = true);
+    try {
+      final account = await _googleSignIn.signIn();
+      if (account != null && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MainNavigationScreen(googleAccount: account),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro no login com Google: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade800, Colors.blue.shade400],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/logo.png',
+                  height: 90,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.request_quote,
+                    size: 90,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'OrçaFácil PRO',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Faça login com sua conta Google para gerenciar seus orçamentos com total segurança.',
+                  style: TextStyle(fontSize: 14, color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 48),
+                _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : ElevatedButton.icon(
+                        onPressed: _handleGoogleLogin,
+                        icon: const Icon(Icons.login, color: Colors.blue),
+                        label: const Text(
+                          'Entrar com Google',
+                          style: TextStyle(
+                              fontSize: 16, color: Colors.black87),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// NAVEGAÇÃO PRINCIPAL & CONTROLE DE DIAS PRO
 // ==========================================
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final GoogleSignInAccount googleAccount;
+
+  const MainNavigationScreen({super.key, required this.googleAccount});
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
@@ -184,19 +306,61 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  bool _isPro = true;
+  bool _isLoading = true;
 
-  final List<Widget> _screens = [
-    const BudgetsHomeScreen(),
-    const AgendaScreen(),
-    const FinancialScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _checkTrialStatus();
+  }
+
+  Future<void> _checkTrialStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    final proStatus = prefs.getBool('is_pro_user') ?? false;
+    if (proStatus) {
+      setState(() {
+        _isPro = true;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    final installDateStr = prefs.getString('install_date');
+    if (installDateStr != null) {
+      final installDate = DateTime.parse(installDateStr);
+      final difference = DateTime.now().difference(installDate).inDays;
+
+      if (difference > 7) {
+        setState(() {
+          _isPro = false;
+        });
+      }
+    }
+    setState(() {
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final List<Widget> screens = [
+      BudgetsHomeScreen(googleAccount: widget.googleAccount, isPro: _isPro),
+      _isPro ? const AgendaScreen() : const LockedFeatureScreen(featureName: 'Agenda'),
+      _isPro ? const FinancialScreen() : const LockedFeatureScreen(featureName: 'Financeiro'),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -228,11 +392,102 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // ==========================================
+// TELA DE RECURSO BLOQUEADO (PAYWALL)
+// ==========================================
+
+class LockedFeatureScreen extends StatelessWidget {
+  final String featureName;
+
+  const LockedFeatureScreen({super.key, required this.featureName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(featureName)),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 70, color: Colors.orange),
+              const SizedBox(height: 16),
+              Text(
+                'Recurso Exclusivo PRO',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Seu período de teste gratuito de 7 dias expirou.\nA aba de $featureName e a emissão de Recibos estão disponíveis apenas na versão PRO.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Ativar Versão PRO'),
+                      content: const Text(
+                          'Deseja simular a ativação da licença PRO para desbloquear todas as funções do OrçaFácil PRO?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Cancelar'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('is_pro_user', true);
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const WelcomeScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text('Ativar PRO (Simular)'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.star, color: Colors.amber),
+                label: const Text('ASSINAR / ATIVAR PRO'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade800,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
 // TELA PRINCIPAL DE ORÇAMENTOS
 // ==========================================
 
 class BudgetsHomeScreen extends StatefulWidget {
-  const BudgetsHomeScreen({super.key});
+  final GoogleSignInAccount googleAccount;
+  final bool isPro;
+
+  const BudgetsHomeScreen({
+    super.key,
+    required this.googleAccount,
+    required this.isPro,
+  });
 
   @override
   State<BudgetsHomeScreen> createState() => _BudgetsHomeScreenState();
@@ -303,6 +558,7 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
       MaterialPageRoute(
         builder: (context) => CompanyProfilePage(
           profile: _companyProfile,
+          googleAccount: widget.googleAccount,
           onSave: (updatedProfile) {
             _saveProfile(updatedProfile);
           },
@@ -362,6 +618,23 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
   }
 
   void _generatePdfPreview(Budget budget, {bool isReceipt = false}) {
+    if (isReceipt && !widget.isPro) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Recurso PRO'),
+          content: const Text('A emissão de Recibos é exclusiva para assinantes PRO ou durante o período de teste de 7 dias.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -386,7 +659,7 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orçamentos & Recibos'),
+        title: const Text('OrçaFácil PRO - Orçamentos'),
         actions: [
           IconButton(
             icon: const Icon(Icons.business),
@@ -397,7 +670,17 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
       ),
       body: Column(
         children: [
-          // Campo de busca
+          if (!widget.isPro)
+            Container(
+              width: double.infinity,
+              color: Colors.amber.shade100,
+              padding: const EdgeInsets.all(8),
+              child: const Text(
+                'Período de teste expirado. Apenas orçamentos estão liberados.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.brown, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -412,8 +695,6 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
           ),
-
-          // Filtro por Status
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -435,8 +716,6 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
             ),
           ),
           const SizedBox(height: 8),
-
-          // Lista de Orçamentos
           Expanded(
             child: filtered.isEmpty
                 ? Center(
@@ -517,7 +796,7 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.15),
+                                  color: statusColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -553,14 +832,14 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
                                       ],
                                     ),
                                   ),
-                                  const PopupMenuItem(
+                                  PopupMenuItem(
                                     value: 'recibo',
                                     child: Row(
                                       children: [
                                         Icon(Icons.receipt,
-                                            color: Colors.green, size: 20),
-                                        SizedBox(width: 8),
-                                        Text('PDF Recibo'),
+                                            color: widget.isPro ? Colors.green : Colors.grey, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(widget.isPro ? 'PDF Recibo' : 'PDF Recibo (PRO)'),
                                       ],
                                     ),
                                   ),
@@ -607,16 +886,104 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
 }
 
 // ==========================================
+// TELA DE ASSINATURA DIGITAL (LOUSA)
+// ==========================================
+
+class SignatureScreen extends StatefulWidget {
+  const SignatureScreen({super.key});
+
+  @override
+  State<SignatureScreen> createState() => _SignatureScreenState();
+}
+
+class _SignatureScreenState extends State<SignatureScreen> {
+  final SignatureController _controller = SignatureController(
+    penStrokeWidth: 3,
+    penColor: Colors.black,
+    exportBackgroundColor: Colors.white,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Desenhar Assinatura'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.clear),
+            tooltip: 'Limpar',
+            onPressed: () => _controller.clear(),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: Container(
+              color: Colors.grey.shade100,
+              child: Signature(
+                controller: _controller,
+                backgroundColor: Colors.white,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (_controller.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Por favor, faça a assinatura.')),
+                        );
+                        return;
+                      }
+                      final signatureBytes = await _controller.toPngBytes();
+                      if (signatureBytes != null && context.mounted) {
+                        Navigator.pop(context, base64Encode(signatureBytes));
+                      }
+                    },
+                    child: const Text('Salvar Assinatura'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
 // TELA DE PERFIL DA EMPRESA
 // ==========================================
 
 class CompanyProfilePage extends StatefulWidget {
   final CompanyProfile profile;
+  final GoogleSignInAccount googleAccount;
   final Function(CompanyProfile) onSave;
 
   const CompanyProfilePage({
     super.key,
     required this.profile,
+    required this.googleAccount,
     required this.onSave,
   });
 
@@ -630,6 +997,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
   String? _logoBase64;
+  String? _signatureBase64;
 
   @override
   void initState() {
@@ -639,6 +1007,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     _phoneController = TextEditingController(text: widget.profile.phone);
     _addressController = TextEditingController(text: widget.profile.address);
     _logoBase64 = widget.profile.logoBase64;
+    _signatureBase64 = widget.profile.signatureBase64;
   }
 
   Future<void> _pickImage() async {
@@ -653,6 +1022,18 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     }
   }
 
+  Future<void> _openSignaturePad() async {
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (context) => const SignatureScreen()),
+    );
+    if (result != null) {
+      setState(() {
+        _signatureBase64 = result;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -663,6 +1044,28 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.account_circle, color: Colors.blue),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Logado como: ${widget.googleAccount.email}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
             GestureDetector(
               onTap: _pickImage,
               child: CircleAvatar(
@@ -679,7 +1082,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
             const SizedBox(height: 8),
             TextButton(
               onPressed: _pickImage,
-              child: const Text('Selecionar Logo'),
+              child: const Text('Selecionar Logo da Empresa'),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -714,6 +1117,45 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Assinatura Padrão (Profissional)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _openSignaturePad,
+                  icon: const Icon(Icons.draw),
+                  label: Text(_signatureBase64 == null
+                      ? 'Desenhar Assinatura'
+                      : 'Alterar Assinatura'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_signatureBase64 != null)
+              Container(
+                height: 100,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    base64Decode(_signatureBase64!),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              )
+            else
+              const Text(
+                'Nenhuma assinatura do profissional cadastrada.',
+                style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -726,6 +1168,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                     phone: _phoneController.text,
                     address: _addressController.text,
                     logoBase64: _logoBase64,
+                    signatureBase64: _signatureBase64,
                   );
                   widget.onSave(updated);
                   Navigator.pop(context);
@@ -768,7 +1211,7 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
   final _discountController = TextEditingController(text: '0.0');
   final _notesController = TextEditingController();
 
-  String _status = 'Pendente';
+  late String _status;
   List<BudgetItem> _items = [];
 
   final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -776,13 +1219,13 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
   @override
   void initState() {
     super.initState();
+    _status = widget.budget?.status ?? 'Pendente';
     if (widget.budget != null) {
       _clientNameController.text = widget.budget!.clientName;
       _clientPhoneController.text = widget.budget!.clientPhone;
       _clientAddressController.text = widget.budget!.clientAddress;
       _discountController.text = widget.budget!.discount.toString();
       _notesController.text = widget.budget!.notes;
-      _status = widget.budget!.status;
       _items = List.from(widget.budget!.items);
     }
   }
@@ -831,9 +1274,9 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
                     BudgetItem(
                       description: descController.text,
                       quantity: int.tryParse(qtyController.text) ?? 1,
-                      unitPrice:
-                          double.tryParse(priceController.text.replaceAll(',', '.')) ??
-                              0.0,
+                      unitPrice: double.tryParse(
+                            priceController.text.replaceAll(',', '.')) ??
+                          0.0,
                     ),
                   );
                 });
@@ -911,8 +1354,6 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // ITENS
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -928,7 +1369,6 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
               ],
             ),
             const SizedBox(height: 8),
-
             _items.isEmpty
                 ? const Center(
                     child: Padding(
@@ -969,7 +1409,6 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
                       );
                     },
                   ),
-
             const SizedBox(height: 20),
             TextField(
               controller: _discountController,
@@ -991,8 +1430,6 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // VALOR TOTAL
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1018,7 +1455,6 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -1090,7 +1526,7 @@ class PdfPreviewScreen extends StatelessWidget {
 }
 
 // ==========================================
-// GERADOR DE DOCUMENTO PDF
+// GERADOR DE DOCUMENTO PDF COM ASSINATURA DA EMPRESA
 // ==========================================
 
 Future<Uint8List> generateBudgetPdf(
@@ -1111,20 +1547,27 @@ Future<Uint8List> generateBudgetPdf(
     } catch (_) {}
   }
 
+  pw.ImageProvider? companySignatureImage;
+  if (profile.signatureBase64 != null && profile.signatureBase64!.isNotEmpty) {
+    try {
+      final bytes = base64Decode(profile.signatureBase64!);
+      companySignatureImage = pw.MemoryImage(bytes);
+    } catch (_) {}
+  }
+
   pdf.addPage(
     pw.Page(
       pageFormat: pageFormat,
       build: (pw.Context context) {
         return pw.Column(
-          cross: pw.CrossAxisAlignment.start,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            // Cabeçalho da Empresa
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              cross: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Column(
-                  cross: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
                       profile.name.isNotEmpty ? profile.name : 'Sua Empresa',
@@ -1142,7 +1585,7 @@ Future<Uint8List> generateBudgetPdf(
                   ],
                 ),
                 if (logoImage != null)
-                  pw.Container(
+                  pw.SizedBox(
                     width: 70,
                     height: 70,
                     child: pw.Image(logoImage),
@@ -1152,8 +1595,6 @@ Future<Uint8List> generateBudgetPdf(
             pw.SizedBox(height: 15),
             pw.Divider(),
             pw.SizedBox(height: 10),
-
-            // Título do Documento
             pw.Center(
               child: pw.Text(
                 isReceipt
@@ -1167,8 +1608,6 @@ Future<Uint8List> generateBudgetPdf(
               ),
             ),
             pw.SizedBox(height: 15),
-
-            // Dados do Cliente
             pw.Container(
               padding: const pw.EdgeInsets.all(10),
               decoration: pw.BoxDecoration(
@@ -1176,7 +1615,7 @@ Future<Uint8List> generateBudgetPdf(
                 borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
               ),
               child: pw.Column(
-                cross: pw.CrossAxisAlignment.start,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text('Cliente: ${budget.clientName}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
@@ -1189,8 +1628,6 @@ Future<Uint8List> generateBudgetPdf(
               ),
             ),
             pw.SizedBox(height: 15),
-
-            // Tabela de Itens
             pw.Table.fromTextArray(
               headers: ['Descrição', 'Qtd', 'Vlr. Unit.', 'Total'],
               data: budget.items
@@ -1215,12 +1652,10 @@ Future<Uint8List> generateBudgetPdf(
               },
             ),
             pw.SizedBox(height: 15),
-
-            // Resumo Financeiro
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                pw.Container(
+                pw.SizedBox(
                   width: 200,
                   child: pw.Column(
                     children: [
@@ -1265,7 +1700,6 @@ Future<Uint8List> generateBudgetPdf(
                 ),
               ],
             ),
-
             if (budget.notes.isNotEmpty) ...[
               pw.SizedBox(height: 15),
               pw.Text('Observações / Condições:',
@@ -1273,23 +1707,31 @@ Future<Uint8List> generateBudgetPdf(
               pw.SizedBox(height: 4),
               pw.Text(budget.notes, style: const pw.TextStyle(fontSize: 10)),
             ],
-
             pw.Spacer(),
-
-            // Assinatura
-            pw.Center(
-              pw.Column(
-                children: [
-                  pw.Container(width: 200, child: pw.Divider()),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    profile.name.isNotEmpty
-                        ? profile.name
-                        : 'Assinatura do Responsável',
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
-                ],
-              ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.center,
+              children: [
+                pw.Column(
+                  children: [
+                    if (companySignatureImage != null)
+                      pw.SizedBox(
+                        width: 180,
+                        height: 50,
+                        child: pw.Image(companySignatureImage),
+                      )
+                    else
+                      pw.SizedBox(height: 50),
+                    pw.SizedBox(width: 200, child: pw.Divider()),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      profile.name.isNotEmpty
+                          ? profile.name
+                          : 'Assinatura do Responsável',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ],
             ),
             pw.SizedBox(height: 10),
           ],

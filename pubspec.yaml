@@ -1,28 +1,34 @@
 name: meu_app_orcamento
-description: "Aplicativo de Geração de Orçamentos e Recibos"
+description: "Aplicativo profissional OrçaFácil PRO para gerenciamento de orçamentos, agenda, finanças e backup na nuvem."
 publish_to: 'none'
+
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.5.0
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  cupertino_icons: ^1.0.8
-  shared_preferences: ^2.2.3
-  pdf: ^3.10.8
-  printing: ^5.11.1
+  intl: ^0.20.3
+  shared_preferences: ^2.3.2
+  pdf: ^3.11.1
+  printing: ^5.13.2
   image_picker: ^1.1.2
-  google_sign_in: ^6.2.1
-  intl: ^0.19.0
+  signature: ^5.5.0
+  google_sign_in: ^6.2.2
+  googleapis: ^13.2.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/logo.png
