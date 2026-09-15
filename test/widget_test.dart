@@ -4,11 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meu_app_orcamento/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MeuAppOrcamento());
+  testWidgets('App smoke test', (WidgetTester tester) async {
+    // Constrói o app removendo o const de UserAccountInfo
+    await tester.pumpWidget(MeuAppOrcamento(
+      isLoggedIn: false,
+      initialUserInfo: UserAccountInfo(
+        email: 'teste@orcafacil.com',
+        displayName: 'Teste',
+      ),
+    ));
 
-    // Verify that our app builds successfully and shows the main title.
-    expect(find.text('Orçamentos & Recibos'), findsOneWidget);
+    // Verifica se o app carrega a tela inicial e exibe o nome do aplicativo
+    expect(find.text('OrçaFácil PRO'), findsOneWidget);
   });
 }

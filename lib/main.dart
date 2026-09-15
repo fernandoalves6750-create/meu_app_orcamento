@@ -11,8 +11,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import 'screens/agenda_screen.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -21,11 +19,29 @@ void main() async {
     await prefs.setString('install_date', DateTime.now().toIso8601String());
   }
 
-  runApp(const MeuAppOrcamento());
+  // Verifica se o usuário já estava logado anteriormente
+  final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+  String? savedEmail = prefs.getString('user_email');
+  String? savedName = prefs.getString('user_name');
+
+  runApp(MeuAppOrcamento(
+    isLoggedIn: isLoggedIn,
+    initialUserInfo: UserAccountInfo(
+      email: savedEmail ?? 'profissional@orcafacil.com',
+      displayName: savedName ?? 'Profissional',
+    ),
+  ));
 }
 
 class MeuAppOrcamento extends StatelessWidget {
-  const MeuAppOrcamento({super.key});
+  final bool isLoggedIn;
+  final UserAccountInfo initialUserInfo;
+
+  const MeuAppOrcamento({
+    super.key,
+    required this.isLoggedIn,
+    required this.initialUserInfo,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +67,10 @@ class MeuAppOrcamento extends StatelessWidget {
       supportedLocales: const [
         Locale('pt', 'BR'),
       ],
-      home: const WelcomeScreen(),
+      // Redireciona direto para o app principal se já estiver logado
+      home: isLoggedIn
+          ? MainNavigationScreen(userInfo: initialUserInfo)
+          : const WelcomeScreen(),
     );
   }
 }
@@ -186,6 +205,42 @@ class Budget {
       );
 }
 
+class Appointment {
+  String id;
+  String title;
+  String clientName;
+  DateTime date;
+  String notes;
+  String? budgetId;
+
+  Appointment({
+    required this.id,
+    required this.title,
+    required this.clientName,
+    required this.date,
+    this.notes = '',
+    this.budgetId,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'clientName': clientName,
+        'date': date.toIso8601String(),
+        'notes': notes,
+        'budgetId': budgetId,
+      };
+
+  factory Appointment.fromJson(Map<String, dynamic> json) => Appointment(
+        id: json['id'] ?? '',
+        title: json['title'] ?? '',
+        clientName: json['clientName'] ?? '',
+        date: DateTime.tryParse(json['date'] ?? '') ?? DateTime.now(),
+        notes: json['notes'] ?? '',
+        budgetId: json['budgetId'],
+      );
+}
+
 class FinancialTransaction {
   String id;
   String description;
@@ -252,7 +307,7 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   bool _isLoading = false;
   String? _errorMessage;
-  int _authMode = 0; // 0 = Início, 1 = Cadastro, 2 = Login
+  int _authMode = 0;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -270,6 +325,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     try {
       final account = await _googleSignIn.signIn();
       if (account != null && mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_logged_in', true);
+        await prefs.setString('user_email', account.email);
+        await prefs.setString('user_name', account.displayName ?? 'Usuário Google');
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -771,8 +831,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return a.date.year == now.year && a.date.month == now.month && a.date.day == now.day;
     }).toList();
 
-    final double totalAReceber = _transactions
-        .where((t) => t.type == 'Receita' && t.status == 'A Receber')
+    final double totalAReceberMes = _transactions
+        .where((t) => t.type == 'Receita' && t.status == 'A Receber' && t.date.month == now.month && t.date.year == now.year)
         .fold(0.0, (sum, t) => sum + t.amount);
 
     final double totalRecebidoMes = _transactions
@@ -784,6 +844,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .fold(0.0, (sum, t) => sum + t.amount);
 
     final double saldoMes = totalRecebidoMes - totalDespesasMes;
+
+    final nextMonth = DateTime(now.year, now.month + 1, 1);
+    final double previsaoProximoMes = _transactions
+        .where((t) => t.type == 'Receita' && t.date.month == nextMonth.month && t.date.year == nextMonth.year)
+        .fold(0.0, (sum, t) => sum + t.amount);
 
     final displayName = _companyProfile.name.isNotEmpty ? _companyProfile.name : widget.userInfo.displayName;
 
@@ -809,7 +874,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Veja um resumo do seu negócio.',
+              'Veja um resumo do seu negócio (Mês Atual).',
               style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
             const SizedBox(height: 20),
@@ -836,8 +901,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: () => widget.onNavigate(2),
                 ),
                 _buildSummaryCard(
-                  title: 'A RECEBER',
-                  value: currencyFormat.format(totalAReceber),
+                  title: 'A RECEBER (MÊS)',
+                  value: currencyFormat.format(totalAReceberMes),
                   color: Colors.indigo,
                   icon: Icons.account_balance_wallet,
                   onTap: () => widget.onNavigate(3),
@@ -850,6 +915,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: () => widget.onNavigate(3),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              color: Colors.blue.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(14.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.trending_up, color: Colors.blue, size: 28),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Previsão Próximo Mês', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                            Text(DateFormat('MMMM yyyy', 'pt_BR').format(nextMonth), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Text(currencyFormat.format(previsaoProximoMes), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -904,13 +996,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
-                    _buildFinanceRow('Recebido', currencyFormat.format(totalRecebidoMes), Colors.green),
+                    _buildFinanceRow('Recebido no Mês', currencyFormat.format(totalRecebidoMes), Colors.green),
                     const Divider(),
-                    _buildFinanceRow('A receber', currencyFormat.format(totalAReceber), Colors.blue),
+                    _buildFinanceRow('A Receber no Mês', currencyFormat.format(totalAReceberMes), Colors.blue),
                     const Divider(),
-                    _buildFinanceRow('Despesas', currencyFormat.format(totalDespesasMes), Colors.red),
+                    _buildFinanceRow('Despesas do Mês', currencyFormat.format(totalDespesasMes), Colors.red),
                     const Divider(),
-                    _buildFinanceRow('Saldo', currencyFormat.format(saldoMes), Colors.indigo, isBold: true),
+                    _buildFinanceRow('Saldo Líquido (Recebido - Despesas)', currencyFormat.format(saldoMes), Colors.indigo, isBold: true),
                   ],
                 ),
               ),
@@ -1015,8 +1107,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
       ],
     );
   }
@@ -1091,6 +1183,169 @@ class LockedFeatureScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// TELA DE AGENDA (COMPLETA)
+// ==========================================
+
+class AgendaScreen extends StatefulWidget {
+  const AgendaScreen({super.key});
+
+  @override
+  State<AgendaScreen> createState() => _AgendaScreenState();
+}
+
+class _AgendaScreenState extends State<AgendaScreen> {
+  List<Appointment> _appointments = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppointments();
+  }
+
+  Future<void> _loadAppointments() async {
+    final prefs = await SharedPreferences.getInstance();
+    final apptsStr = prefs.getString('appointments_list');
+    if (apptsStr != null) {
+      setState(() {
+        _appointments = (jsonDecode(apptsStr) as List).map((e) => Appointment.fromJson(e)).toList();
+      });
+    }
+  }
+
+  Future<void> _saveAppointments() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('appointments_list', jsonEncode(_appointments.map((a) => a.toJson()).toList()));
+  }
+
+  void _openAppointmentForm([Appointment? appt]) {
+    final titleController = TextEditingController(text: appt?.title ?? '');
+    final clientController = TextEditingController(text: appt?.clientName ?? '');
+    final notesController = TextEditingController(text: appt?.notes ?? '');
+    DateTime selectedDate = appt?.date ?? DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(appt == null ? 'Novo Agendamento' : 'Editar Agendamento'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Título do Serviço *')),
+                const SizedBox(height: 10),
+                TextField(controller: clientController, decoration: const InputDecoration(labelText: 'Cliente *')),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: Text('Data: ${DateFormat('dd/MM/yyyy HH:mm').format(selectedDate)}')),
+                    IconButton(
+                      icon: const Icon(Icons.calendar_today),
+                      onPressed: () async {
+                        final pickedDate = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (pickedDate != null) {
+                          final pickedTime = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selectedDate),
+                          );
+                          setDialogState(() {
+                            selectedDate = DateTime(
+                              pickedDate.year,
+                              pickedDate.month,
+                              pickedDate.day,
+                              pickedTime?.hour ?? selectedDate.hour,
+                              pickedTime?.minute ?? selectedDate.minute,
+                            );
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: notesController, decoration: const InputDecoration(labelText: 'Observações')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () {
+                if (titleController.text.isEmpty || clientController.text.isEmpty) return;
+                setState(() {
+                  if (appt != null) {
+                    appt.title = titleController.text;
+                    appt.clientName = clientController.text;
+                    appt.date = selectedDate;
+                    appt.notes = notesController.text;
+                  } else {
+                    _appointments.add(Appointment(
+                      id: DateTime.now().toString(),
+                      title: titleController.text,
+                      clientName: clientController.text,
+                      date: selectedDate,
+                      notes: notesController.text,
+                    ));
+                  }
+                });
+                _saveAppointments();
+                Navigator.pop(ctx);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Agenda de Serviços'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAppointments),
+        ],
+      ),
+      body: _appointments.isEmpty
+          ? const Center(child: Text('Nenhum agendamento cadastrado.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _appointments.length,
+              itemBuilder: (context, index) {
+                final item = _appointments[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Cliente: ${item.clientName}\nData: ${DateFormat('dd/MM/yyyy HH:mm').format(item.date)}'),
+                    isThreeLine: true,
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () {
+                        setState(() => _appointments.removeAt(index));
+                        _saveAppointments();
+                      },
+                    ),
+                    onTap: () => _openAppointmentForm(item),
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openAppointmentForm(),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -1181,19 +1436,21 @@ class _ManagedFinancialScreenState extends State<ManagedFinancialScreen> {
     await prefs.setString('financial_transactions_list', jsonStr);
   }
 
-  double get _totalRecebido => _transactions
-      .where((t) => t.type == 'Receita' && (t.status == 'Recebido' || t.status == 'Pago'))
+  DateTime get _now => DateTime.now();
+
+  double get _totalRecebidoMes => _transactions
+      .where((t) => t.type == 'Receita' && (t.status == 'Recebido' || t.status == 'Pago') && t.date.month == _now.month && t.date.year == _now.year)
       .fold(0.0, (sum, t) => sum + t.amount);
 
-  double get _totalAReceber => _transactions
-      .where((t) => t.type == 'Receita' && t.status == 'A Receber')
+  double get _totalAReceberMes => _transactions
+      .where((t) => t.type == 'Receita' && t.status == 'A Receber' && t.date.month == _now.month && t.date.year == _now.year)
       .fold(0.0, (sum, t) => sum + t.amount);
 
-  double get _totalDespesas => _transactions
-      .where((t) => t.type == 'Despesa')
+  double get _totalDespesasMes => _transactions
+      .where((t) => t.type == 'Despesa' && t.date.month == _now.month && t.date.year == _now.year)
       .fold(0.0, (sum, t) => sum + t.amount);
 
-  double get _saldoLiquido => (_totalRecebido + _totalAReceber) - _totalDespesas;
+  double get _saldoLiquidoMes => _totalRecebidoMes - _totalDespesasMes;
 
   List<FinancialTransaction> get _filteredTransactions {
     return _transactions.where((t) {
@@ -1276,12 +1533,62 @@ class _ManagedFinancialScreenState extends State<ManagedFinancialScreen> {
     }
   }
 
+  void _showReport90Days() {
+    final limitDate = _now.subtract(const Duration(days: 90));
+    final trans90 = _transactions.where((t) {
+      return t.date.isAfter(limitDate) && t.date.isBefore(_now.add(const Duration(days: 1)));
+    }).toList();
+
+    double rec90 = trans90.where((t) => t.type == 'Receita' && (t.status == 'Recebido' || t.status == 'Pago')).fold(0.0, (s, t) => s + t.amount);
+    double desp90 = trans90.where((t) => t.type == 'Despesa').fold(0.0, (s, t) => s + t.amount);
+    double saldo90 = rec90 - desp90;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Relatório (Últimos 90 Dias)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Período: ${DateFormat('dd/MM/yyyy').format(limitDate)} até ${DateFormat('dd/MM/yyyy').format(_now)}'),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Total Recebido: ${currencyFormat.format(rec90)}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('Total Despesas: ${currencyFormat.format(desp90)}', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            const Divider(),
+            Text('Resultado Líquido: ${currencyFormat.format(saldo90)}', style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredTransactions;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Financeiro & Relatórios')),
+      appBar: AppBar(
+        title: const Text('Financeiro & Relatórios'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.assessment),
+            tooltip: 'Relatório 90 Dias',
+            onPressed: _showReport90Days,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar Dados',
+            onPressed: _loadFinancialData,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Container(
@@ -1291,17 +1598,17 @@ class _ManagedFinancialScreenState extends State<ManagedFinancialScreen> {
               children: [
                 Row(
                   children: [
-                    Expanded(child: _buildSummaryCard('Recebido', currencyFormat.format(_totalRecebido), Colors.green)),
+                    Expanded(child: _buildSummaryCard('Recebido (Mês)', currencyFormat.format(_totalRecebidoMes), Colors.green)),
                     const SizedBox(width: 6),
-                    Expanded(child: _buildSummaryCard('A Receber', currencyFormat.format(_totalAReceber), Colors.blue)),
+                    Expanded(child: _buildSummaryCard('A Receber (Mês)', currencyFormat.format(_totalAReceberMes), Colors.blue)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Expanded(child: _buildSummaryCard('Despesas', currencyFormat.format(_totalDespesas), Colors.red)),
+                    Expanded(child: _buildSummaryCard('Despesas (Mês)', currencyFormat.format(_totalDespesasMes), Colors.red)),
                     const SizedBox(width: 6),
-                    Expanded(child: _buildSummaryCard('Saldo Líquido', currencyFormat.format(_saldoLiquido), Colors.indigo)),
+                    Expanded(child: _buildSummaryCard('Saldo Líquido (Mês)', currencyFormat.format(_saldoLiquidoMes), Colors.indigo)),
                   ],
                 ),
               ],
@@ -1622,6 +1929,49 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     final jsonStr = jsonEncode(_budgets.map((b) => b.toJson()).toList());
     await prefs.setString('budgets_list', jsonStr);
+
+    _syncTransactionsWithBudgetsLocally();
+  }
+
+  Future<void> _syncTransactionsWithBudgetsLocally() async {
+    final prefs = await SharedPreferences.getInstance();
+    final transStr = prefs.getString('financial_transactions_list');
+    List<FinancialTransaction> transactions = [];
+    if (transStr != null) {
+      final List<dynamic> listJson = jsonDecode(transStr);
+      transactions = listJson.map((e) => FinancialTransaction.fromJson(e)).toList();
+    }
+
+    List<FinancialTransaction> manualOrExpense = transactions.where((t) => t.budgetId == null).toList();
+    List<FinancialTransaction> updatedTransactions = [...manualOrExpense];
+
+    for (var b in _budgets) {
+      if (b.status != 'Cancelado') {
+        final existingTrans = transactions.firstWhere(
+          (t) => t.budgetId == b.id,
+          orElse: () => FinancialTransaction(
+            id: 'trans_${b.id}',
+            description: 'Orçamento #${b.number.toString().padLeft(3, '0')} - ${b.clientName}',
+            clientName: b.clientName,
+            amount: b.total,
+            date: b.date,
+            type: 'Receita',
+            status: 'A Receber',
+            category: 'Orçamento',
+            budgetId: b.id,
+          ),
+        );
+
+        existingTrans.amount = b.total;
+        existingTrans.description = 'Orçamento #${b.number.toString().padLeft(3, '0')} - ${b.clientName}';
+        existingTrans.clientName = b.clientName;
+        existingTrans.date = b.date;
+
+        updatedTransactions.add(existingTrans);
+      }
+    }
+
+    await prefs.setString('financial_transactions_list', jsonEncode(updatedTransactions.map((t) => t.toJson()).toList()));
   }
 
   Future<void> _saveProfile(CompanyProfile profile) async {
@@ -1733,6 +2083,11 @@ class _BudgetsHomeScreenState extends State<BudgetsHomeScreen> {
             icon: const Icon(Icons.business),
             tooltip: 'Perfil da Empresa',
             onPressed: _openProfileEditor,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar Dados',
+            onPressed: _loadData,
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent),
@@ -2171,6 +2526,7 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
   final _notesController = TextEditingController();
 
   late String _status;
+  late DateTime _selectedDate;
   List<BudgetItem> _items = [];
 
   final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -2179,6 +2535,7 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
   void initState() {
     super.initState();
     _status = widget.budget?.status ?? 'Pendente';
+    _selectedDate = widget.budget?.date ?? DateTime.now();
     if (widget.budget != null) {
       _clientNameController.text = widget.budget!.clientName;
       _clientPhoneController.text = widget.budget!.clientPhone;
@@ -2233,6 +2590,18 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
     );
   }
 
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
   double get _subtotal => _items.fold(0.0, (sum, item) => sum + item.total);
   double get _discount => double.tryParse(_discountController.text.replaceAll(',', '.')) ?? 0.0;
   double get _total => (_subtotal - _discount) < 0 ? 0.0 : (_subtotal - _discount);
@@ -2264,6 +2633,19 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
             ),
             const SizedBox(height: 12),
             TextField(controller: _clientAddressController, decoration: const InputDecoration(labelText: 'Endereço', border: OutlineInputBorder())),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Data: ${DateFormat('dd/MM/yyyy').format(_selectedDate)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: const Text('Alterar Data'),
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2328,7 +2710,7 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
                     clientName: _clientNameController.text,
                     clientPhone: _clientPhoneController.text,
                     clientAddress: _clientAddressController.text,
-                    date: widget.budget?.date ?? DateTime.now(),
+                    date: _selectedDate,
                     items: _items,
                     discount: _discount,
                     status: _status,
@@ -2348,7 +2730,7 @@ class _BudgetFormScreenState extends State<BudgetFormScreen> {
 }
 
 // ==========================================
-// PRÉ-VISUALIZAÇÃO DE PDF SEGURA
+// PRÉ-VISUALIZAÇÃO DE PDF
 // ==========================================
 
 class PdfPreviewScreen extends StatelessWidget {
@@ -2430,18 +2812,24 @@ Future<Uint8List> generateBudgetPdf(
           children: [
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(profile.name.isNotEmpty ? profile.name : 'Sua Empresa', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                    if (profile.doc.isNotEmpty) pw.Text('CPF/CNPJ: ${profile.doc}'),
-                    if (profile.phone.isNotEmpty) pw.Text('Tel/WhatsApp: ${profile.phone}'),
-                    if (profile.address.isNotEmpty) pw.Text('Endereço: ${profile.address}'),
-                  ],
+                if (logoImage != null)
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(right: 15),
+                    child: pw.SizedBox(width: 70, height: 70, child: pw.Image(logoImage)),
+                  ),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(profile.name.isNotEmpty ? profile.name : 'Sua Empresa', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                      if (profile.doc.isNotEmpty) pw.Text('CPF/CNPJ: ${profile.doc}'),
+                      if (profile.phone.isNotEmpty) pw.Text('Tel/WhatsApp: ${profile.phone}'),
+                      if (profile.address.isNotEmpty) pw.Text('Endereço: ${profile.address}'),
+                    ],
+                  ),
                 ),
-                if (logoImage != null) pw.SizedBox(width: 70, height: 70, child: pw.Image(logoImage)),
               ],
             ),
             pw.SizedBox(height: 15),

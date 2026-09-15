@@ -9,7 +9,7 @@ class Appointment {
   String clientName;
   DateTime date;
   String notes;
-  String? budgetId; // Vínculo com o Orçamento
+  String? budgetId;
 
   Appointment({
     required this.id,
@@ -183,10 +183,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 }
 
-// ==========================================
-// FORMULÁRIO DE AGENDAMENTO COM ORÇAMENTOS PENDENTES
-// ==========================================
-
 class AppointmentFormScreen extends StatefulWidget {
   final Appointment? appointment;
   final Function(Appointment) onSave;
@@ -231,7 +227,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
       setState(() {
         _pendingBudgets = listJson
             .map((e) => e as Map<String, dynamic>)
-            .where((b) => b['status'] == 'Pendente')
+            .where((b) => b['status'] == 'Pendente' || b['id'] == widget.appointment?.budgetId)
             .toList();
       });
     }
@@ -244,7 +240,7 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
       final List<dynamic> listJson = jsonDecode(budgetsStr);
       final updatedList = listJson.map((e) {
         if (e['id'] == budgetId) {
-          e['status'] = 'Aprovado'; // Muda automaticamente de Pendente para Aprovado
+          e['status'] = 'Aprovado';
         }
         return e;
       }).toList();
@@ -260,7 +256,6 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Lista Suspensa com Orçamentos Pendentes
             DropdownButtonFormField<String>(
               value: _selectedBudgetId,
               decoration: const InputDecoration(
@@ -363,7 +358,6 @@ class _AppointmentFormScreenState extends State<AppointmentFormScreen> {
                     _selectedTime.minute,
                   );
 
-                  // Se escolheu um orçamento pendente, atualiza o status dele para Aprovado
                   if (_selectedBudgetId != null) {
                     await _updateBudgetStatusToApproved(_selectedBudgetId!);
                   }

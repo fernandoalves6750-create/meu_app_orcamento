@@ -1,4 +1,3 @@
-// lib/screens/financial_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/app_models.dart';
@@ -13,7 +12,6 @@ class FinancialScreen extends StatefulWidget {
 class _FinancialScreenState extends State<FinancialScreen> {
   final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
-  // Histórico e Previsão de Serviços
   final List<WorkModel> _works = [
     WorkModel(
       id: '1',
@@ -76,13 +74,11 @@ class _FinancialScreenState extends State<FinancialScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // CARDS DE RESUMO FINANCEIRO
             const Text(
               'Previsão Financeira',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-
             Row(
               children: [
                 Expanded(
@@ -105,7 +101,6 @@ class _FinancialScreenState extends State<FinancialScreen> {
               ],
             ),
             const SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
@@ -127,10 +122,7 @@ class _FinancialScreenState extends State<FinancialScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 28),
-
-            // RELATÓRIO DOS ÚLTIMOS TRABALHOS
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -145,7 +137,6 @@ class _FinancialScreenState extends State<FinancialScreen> {
               ],
             ),
             const SizedBox(height: 12),
-
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -169,7 +160,7 @@ class _FinancialScreenState extends State<FinancialScreen> {
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: statusColor.withOpacity(0.15),
+                      backgroundColor: statusColor.withValues(alpha: 0.15),
                       child: Icon(Icons.work_outline, color: statusColor),
                     ),
                     title: Text(
@@ -196,7 +187,7 @@ class _FinancialScreenState extends State<FinancialScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.2),
+                            color: statusColor.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -229,9 +220,9 @@ class _FinancialScreenState extends State<FinancialScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
